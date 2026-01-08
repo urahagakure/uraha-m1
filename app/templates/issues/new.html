@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Create Issue</h1>
+  <p>
+    <a href="{{ url_for('issues_index') }}">Back to list</a>
+  </p>
+  {% if errors %}
+    <ul>
+      {% for error in errors %}
+        <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+  <form method="post">
+    <div>
+      <label for="title">Title</label>
+      <input id="title" name="title" type="text" value="{{ form.title or '' }}" required />
+    </div>
+    <div>
+      <label for="tags">Tags</label>
+      <input id="tags" name="tags" type="text" value="{{ form.tags or '' }}" />
+    </div>
+    <div>
+      <label for="intensity">Intensity (0-10)</label>
+      <input
+        id="intensity"
+        name="intensity"
+        type="number"
+        min="0"
+        max="10"
+        value="{{ form.intensity or 0 }}"
+      />
+    </div>
+    <div>
+      <label for="note">Note</label>
+      <textarea id="note" name="note" rows="4">{{ form.note or '' }}</textarea>
+    </div>
+    <button type="submit">Create</button>
+  </form>
+{% endblock %}

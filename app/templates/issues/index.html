@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>Issues</h1>
+  <p>
+    <a href="{{ url_for('issues_new') }}">Create a new issue</a>
+  </p>
+  {% if issues %}
+    <ul>
+      {% for issue in issues %}
+        <li>
+          <strong>{{ issue.title }}</strong>
+          <div>Tags: {{ issue.tags or "-" }}</div>
+          <div>Intensity: {{ issue.intensity }}</div>
+          <div>Note: {{ issue.note or "-" }}</div>
+          <div>Created: {{ issue.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>No issues yet.</p>
+  {% endif %}
+{% endblock %}
