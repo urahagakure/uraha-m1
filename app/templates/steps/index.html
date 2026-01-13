@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>steps 履歴一覧</h1>
+
+<p>表示件数: {{ limit }}</p>
+<p><a href="/boundary">境界テンプレへ</a></p>
+
+<table border="1" cellpadding="6">
+  <thead>
+    <tr>
+      <th>id</th>
+      <th>created_at</th>
+      <th>template</th>
+      <th>pi_t</th>
+      <th>detail</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in steps %}
+    <tr>
+      <td>{{ s["id"] }}</td>
+      <td>{{ s["created_at"] }}</td>
+      <td>{{ s["template_id"] }}</td>
+      <td>{{ s["pi_t"] }}</td>
+      <td><a href="/steps/{{ s['id'] }}">開く</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -52,5 +52,7 @@ def create_app() -> Flask:
 
     from app.web.routes_boundary import bp_boundary  # R5-2: 境界Blueprintを読み込む
     app.register_blueprint(bp_boundary)  # R5-2: /boundary ルートを有効化する
+    from app.web.routes_steps import bp_steps  # R7-3: 履歴Blueprintを読み込む
+    app.register_blueprint(bp_steps)  # R7-3: /steps を有効化する
 
     return app

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>step 詳細</h1>
+
+<p><a href="/steps">一覧へ戻る</a></p>
+
+<p>id: {{ step["id"] }}</p>
+<p>created_at: {{ step["created_at"] }}</p>
+<p>template: {{ step["template_id"] }}</p>
+
+<h2>入力（o_t）</h2>
+<pre>{{ step["o_t"] }}</pre>
+
+<h2>隠れ状態（s_t）</h2>
+<pre>{{ step["s_t"] }}</pre>
+
+<h2>推奨方策（pi_t）</h2>
+<p><strong>{{ step["pi_t"] }}</strong></p>
+
+<h2>予測（o_t1_pred）</h2>
+<pre>{{ step["o_t1_pred"] }}</pre>
+
+<h2>介入案（notes）</h2>
+<ul>
+  {% for n in step["notes"] %}
+    <li>{{ n }}</li>
+  {% endfor %}
+</ul>
+{% endblock %}
