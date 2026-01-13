@@ -50,4 +50,7 @@ def create_app() -> Flask:
 
         return render_template("issues/new.html", errors=[], form={})
 
+    from app.web.routes_boundary import bp_boundary  # R5-2: 境界Blueprintを読み込む
+    app.register_blueprint(bp_boundary)  # R5-2: /boundary ルートを有効化する
+
     return app

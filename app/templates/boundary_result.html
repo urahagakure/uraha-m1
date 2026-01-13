@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>結果</h1>
+
+<p>保存ID: {{ row_id }}</p>
+
+<h2>入力（o_t）</h2>
+<pre>{{ o_t }}</pre>
+
+<h2>推奨方策（pi_t）</h2>
+<p><strong>{{ pi_t }}</strong></p>
+
+<h2>次観測の予測（o_{t+1} / ダミー）</h2>
+<pre>{{ o_t1_pred }}</pre>
+
+<h2>介入案（notes）</h2>
+<ul>
+  {% for n in notes %}
+    <li>{{ n }}</li>
+  {% endfor %}
+</ul>
+
+<p><a href="/boundary">戻る</a></p>
+{% endblock %}
