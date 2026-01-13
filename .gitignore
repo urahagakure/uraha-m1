@@ -1,0 +1,13 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Virtual env (Poetry in-project venv)
+.venv/
+
+# Instance DB (local/dev)
+instance/*.db
+instance/*.db.*
+
+# Env files
+.env
