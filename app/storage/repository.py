@@ -93,6 +93,59 @@ def list_steps(limit: int = 50) -> List[Dict[str, Any]]:  # R6-1: 最新N件のs
     finally:  # R6-1: 必ず閉じる
         conn.close()  # R6-1: DB接続を閉じる
 
+def list_steps_filtered(  # R14-1: 条件付きでstep履歴を返す
+    limit: int = 50,  # R14-1: 取得上限
+    template: str | None = None,  # R14-2: template_id条件（任意）
+    pi_t: str | None = None,  # R14-3: pi_t条件（任意）
+) -> List[Dict[str, Any]]:
+    conn = connect()  # R14-1: DBへ接続する
+    try:  # R14-1: close保証
+        init_schema(conn)  # R14-1: スキーマ確保（冪等）
+
+        where: List[str] = []  # R14-2: WHERE条件を集める
+        params: List[Any] = []  # R14-2: バインド値を集める
+
+        if template:  # R14-2: template指定がある場合
+            where.append("template_id = ?")  # R14-2: 条件を追加する
+            params.append(template)  # R14-2: 値を追加する
+
+        if pi_t:  # R14-3: pi_t指定がある場合
+            where.append("pi_t = ?")  # R14-3: 条件を追加する
+            params.append(pi_t)  # R14-3: 値を追加する
+
+        where_sql = (" WHERE " + " AND ".join(where)) if where else ""  # R14-4: AND結合してWHERE句を作る
+
+        sql = (  # R14-1: クエリ本体
+            "SELECT id, created_at, template_id, s_t_json, o_t_json, pi_t, o_t1_pred_json, notes_json "
+            "FROM steps"
+            f"{where_sql} "
+            "ORDER BY id DESC "
+            "LIMIT ?"
+        )  # R14-1: 最新順にlimit件
+
+        params.append(int(limit))  # R14-1: LIMITは最後に追加する
+
+        cur = conn.execute(sql, tuple(params))  # R14-1: SQLを実行する
+        rows = cur.fetchall()  # R14-1: 取得する
+
+        out: List[Dict[str, Any]] = []  # R14-1: 返却リスト
+        for r in rows:  # R14-1: 各行を整形する
+            out.append(
+                {
+                    "id": int(r["id"]),  # R14-1: id
+                    "created_at": r["created_at"],  # R14-1: created_at
+                    "template_id": r["template_id"],  # R14-1: template_id
+                    "s_t": _loads_json(r["s_t_json"], {}),  # R14-1: s_t_json
+                    "o_t": _loads_json(r["o_t_json"], {}),  # R14-1: o_t_json
+                    "pi_t": r["pi_t"],  # R14-1: pi_t
+                    "o_t1_pred": _loads_json(r["o_t1_pred_json"], {}),  # R14-1: o_t1_pred_json
+                    "notes": _loads_json(r["notes_json"], []),  # R14-1: notes_json
+                }
+            )
+        return out  # R14-1: 整形済みを返す
+    finally:  # R14-1: close保証
+        conn.close()  # R14-1: DBを閉じる
+
 
 def read_step(step_id: int) -> Optional[Dict[str, Any]]:  # R6-2: id指定で1件返す（無ければNone）
     conn = connect()  # R6-2: instance/app.dbへ接続する
