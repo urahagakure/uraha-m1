@@ -2,7 +2,22 @@
 {% block content %}
 <h1>steps 履歴一覧</h1>
 
-<p>表示件数: {{ limit }}</p>
+<p>
+  フィルタ:
+  template={{ template if template else "-" }},
+  pi_t={{ pi_t if pi_t else "-" }},
+  limit={{ limit }}
+</p>
+
+<p>
+  例:
+  <a href="/steps?template=boundary">boundaryのみ</a> |
+  <a href="/steps?template=boundary&pi_t=withdraw">boundary + withdraw</a> |
+  <a href="/steps?limit=200">limit=200</a>
+</p>
+
+<p>表示件数: {{ count }}</p>
+<p>取得上限（limit）: {{ limit }}</p>
 <p><a href="/boundary">境界テンプレへ</a></p>
 
 <table border="1" cellpadding="6">
