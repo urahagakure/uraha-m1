@@ -2,27 +2,33 @@
 {% block content %}
 <h1>境界テンプレ V0</h1>
 
+{% if error %}
+  <p style="color:red">{{ error }}</p>
+{% endif %}
+
 <form method="post" action="/boundary">
   <div>
     <label>脅威推定 threat (0-3)</label>
-    <input type="number" name="threat" min="0" max="3" step="1" value="0" />
+    <input type="number" name="threat" min="0" max="3" step="1" value="{{ form.threat|default('0') }}" />
   </div>
 
   <div>
     <label>身体警報 body_alarm (0-3)</label>
-    <input type="number" name="body_alarm" min="0" max="3" step="1" value="0" />
+    <input type="number" name="body_alarm" min="0" max="3" step="1" value="{{ form.body_alarm|default('0') }}" />
   </div>
 
   <div>
     <label>ニーズ明確度 need_clarity (0-3)</label>
-    <input type="number" name="need_clarity" min="0" max="3" step="1" value="0" />
+    <input type="number" name="need_clarity" min="0" max="3" step="1" value="{{ form.need_clarity|default('0') }}" />
   </div>
 
   <div>
     <label>余力 energy (0-3)</label>
-    <input type="number" name="energy" min="0" max="3" step="1" value="0" />
+    <input type="number" name="energy" min="0" max="3" step="1" value="{{ form.energy|default('0') }}" />
   </div>
 
   <button type="submit">1-stepシミュレーション</button>
 </form>
+
+<p><a href="/steps">履歴一覧へ</a></p>
 {% endblock %}
