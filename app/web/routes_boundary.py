@@ -26,18 +26,34 @@ def _build_form_from_ot(o_t: dict) -> dict:  # R8-2: 過去ログのo_tからフ
     }  # R8-2: 必須項目を揃える
 
 
-@bp_boundary.get("/boundary")  # R8-1: 入力フォームを表示する
+@bp_boundary.get("/boundary")  # R10-0: 入力フォームを表示する
 def boundary_form():
-    step_id = request.args.get("step_id")  # R8-2: 再実行元ログID（任意）を受け取る
-    form = {"threat": "0", "body_alarm": "0", "need_clarity": "0", "energy": "0"}  # R8-2: デフォルト初期値
+    # R10-1: クエリから直接フォーム値を受け取れるようにする（結果→再実行用）
+    q_threat = request.args.get("threat")  # R10-1: threatをクエリから受け取る
+    q_body_alarm = request.args.get("body_alarm")  # R10-1: body_alarmをクエリから受け取る
+    q_need_clarity = request.args.get("need_clarity")  # R10-1: need_clarityをクエリから受け取る
+    q_energy = request.args.get("energy")  # R10-1: energyをクエリから受け取る
 
-    if step_id:  # R8-2: step_idが指定されている場合
-        step = read_step(_to_int(step_id, 0))  # R8-2: DBからログを読む（無ければNone）
-        if step and isinstance(step.get("o_t"), dict):  # R8-2: o_tが辞書なら
-            form = _build_form_from_ot(step["o_t"])  # R8-2: o_tからフォーム初期値を作る
+    form = {"threat": "0", "body_alarm": "0", "need_clarity": "0", "energy": "0"}  # R10-2: デフォルト初期値
 
-    return render_template("boundary_form.html", form=form, error=None)  # R8-2: formを渡して描画する
+    # R10-3: クエリ値が揃っているなら、それを優先してフォームを作る
+    if any(v is not None for v in (q_threat, q_body_alarm, q_need_clarity, q_energy)):  # R10-3: どれかが来ていれば
+        form = {  # R10-3: クエリ値を文字列のままフォームに入れる（入力保持と同じ方針）
+            "threat": q_threat or "0",  # R10-3: threat
+            "body_alarm": q_body_alarm or "0",  # R10-3: body_alarm
+            "need_clarity": q_need_clarity or "0",  # R10-3: need_clarity
+            "energy": q_energy or "0",  # R10-3: energy
+        }
+        return render_template("boundary_form.html", form=form, error=None)  # R10-3: クエリフォームで描画する
 
+    # R10-4: クエリが無い場合は step_id を見る（従来の再実行）
+    step_id = request.args.get("step_id")  # R10-4: 再実行元ログID（任意）
+    if step_id:  # R10-4: step_idが指定されている場合
+        step = read_step(_to_int(step_id, 0))  # R10-4: DBからログを読む
+        if step and isinstance(step.get("o_t"), dict):  # R10-4: o_tが辞書なら
+            form = _build_form_from_ot(step["o_t"])  # R10-4: o_tからフォームを作る
+
+    return render_template("boundary_form.html", form=form, error=None)  # R10-2: デフォルト/step_idで描画する
 
 @bp_boundary.post("/boundary")  # R8-1: フォーム送信を処理する
 def boundary_submit():

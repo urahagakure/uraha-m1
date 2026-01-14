@@ -20,5 +20,15 @@
   {% endfor %}
 </ul>
 
+<p><a href="/steps">履歴一覧へ</a></p>
+
+<p>
+  <a href="/boundary?threat={{ o_t['threat'] }}&body_alarm={{ o_t['body_alarm'] }}&need_clarity={{ o_t['need_clarity'] }}&energy={{ o_t['energy'] }}">
+    この入力で再実行
+  </a>
+</p>
+
+<p><a href="/boundary">新規入力へ</a></p>
+
 <p><a href="/boundary">戻る</a></p>
 {% endblock %}
