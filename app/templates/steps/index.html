@@ -12,6 +12,7 @@
       <th>created_at</th>
       <th>template</th>
       <th>pi_t</th>
+      <th>o_t summary</th>
       <th>detail</th>
     </tr>
   </thead>
@@ -22,6 +23,13 @@
       <td>{{ s["created_at"] }}</td>
       <td>{{ s["template_id"] }}</td>
       <td>{{ s["pi_t"] }}</td>
+      <td>
+        {% set o = s["o_t"] %}
+        threat={{ o.get("threat", "-") }},
+        body_alarm={{ o.get("body_alarm", "-") }},
+        need_clarity={{ o.get("need_clarity", "-") }},
+        energy={{ o.get("energy", "-") }}
+      </td>
       <td><a href="/steps/{{ s['id'] }}">開く</a></td>
     </tr>
     {% endfor %}
