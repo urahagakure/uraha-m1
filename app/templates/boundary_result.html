@@ -14,6 +14,21 @@
 <pre>{{ o_t1_pred }}</pre>
 
 <h2>介入案（notes）</h2>
+
+<h2>介入点（方策が変わった近傍）</h2>
+{% if proposals and proposals|length > 0 %}
+  <ul>
+    {% for p in proposals %}
+      <li>
+        {{ p.label }} : {{ p.from }} → {{ p.to }}
+        （pi_t: {{ p.pi_t }}）
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p>候補は0件でした（±1の範囲では方策が変わりませんでした）。</p>
+{% endif %}
+
 <ul>
   {% for n in notes %}
     <li>{{ n }}</li>

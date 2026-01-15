@@ -8,6 +8,8 @@ from app.storage.repository import init_db, save_step, read_step  # R8-4: 保存
 
 from app.validators import validate_boundary_form  # R15-6: 定義準拠の検証を使う
 
+from app.templates_def.boundary import BOUNDARY_FIELDS  # R16-5: 範囲情報を使う
+
 bp_boundary = Blueprint("boundary", __name__)  # R8-1: 境界テンプレ用Blueprint
 
 
@@ -56,6 +58,47 @@ def boundary_form():
 
     return render_template("boundary_form.html", form=form, error=None)  # R10-2: デフォルト/step_idで描画する
 
+def propose_interventions(base_cleaned: dict, base_pi_t: str) -> list[dict]:  # R16-1: 介入候補を作る
+    proposals: list[dict] = []  # R16-1: 候補を貯める
+
+    for f in BOUNDARY_FIELDS:  # R16-2: 各入力を1つずつ動かす
+        for delta in (-1, 1):  # R16-2: ±1だけ試す
+            v0 = int(base_cleaned[f.key])  # R16-2: 現在値
+            v1 = v0 + delta  # R16-2: 近傍値
+            if v1 < f.min or v1 > f.max:  # R16-5: 範囲外はスキップ
+                continue  # R16-5: 無効候補は出さない
+
+            alt = dict(base_cleaned)  # R16-2: 入力をコピーする
+            alt[f.key] = v1  # R16-2: 1項目だけ変更する
+
+            # --- alt でsimulate_stepを回す（既存ロジックを最小で再利用） ---
+            s_t = {"energy": alt["energy"]}  # R16-3: 隠れ状態（現状どおり）
+            o_t = {  # R16-3: 観測（現状どおり）
+                "threat": alt["threat"],
+                "body_alarm": alt["body_alarm"],
+                "need_clarity": alt["need_clarity"],
+                "energy": alt["energy"],
+            }
+
+            x = StepInput(  # R16-3: 契約どおり入力を作る
+                s_t=s_t,  # R16-3
+                o_t=o_t,  # R16-3
+                prefs={"safe": 0.7, "connect": 0.3},  # R16-3: V0固定
+                precision={"policy": 1.0},  # R16-3: V0固定
+            )
+            y = simulate_step(x)  # R16-3: 近傍ケースを評価する
+
+            if y.pi_t != base_pi_t:  # R16-3: 方策が変わったものだけ採用
+                proposals.append({  # R16-4: 表示用の情報をまとめる
+                    "key": f.key,  # R16-4: 変更項目
+                    "label": f.label,  # R16-4: 表示名
+                    "from": v0,  # R16-4: 変更前
+                    "to": v1,  # R16-4: 変更後
+                    "pi_t": y.pi_t,  # R16-4: 新しい方策
+                })
+
+    return proposals  # R16-1: 候補一覧を返す
+
 @bp_boundary.post("/boundary")  # R5-2: フォーム送信を処理する
 def boundary_submit():
     # --- 1) 入力検証（ここはあなたの現行実装に合わせてOK） ---
@@ -63,7 +106,7 @@ def boundary_submit():
 
     cleaned, err = validate_boundary_form(request.form)  # R15-6: 検証+正規化
     if err:
-        return render_template("boundary_form.html", error=err, form=dict(request.form)), 400  # R15-err-1: テンプレで安定参照
+            return render_template("boundary_form.html", error=err, form=dict(request.form)), 400  # R15-err-1: テンプレで安定参照
 
     threat = cleaned["threat"]  # R15-6
     body_alarm = cleaned["body_alarm"]  # R15-6
@@ -101,6 +144,8 @@ def boundary_submit():
         notes=y.notes,
     )
 
+    proposals = propose_interventions(cleaned, y.pi_t)  # R16-1: 介入候補を計算する
+
     # --- 6) 結果ページ ---
     return render_template(  # R5-2: 結果ページを返す
         "boundary_result.html",
@@ -110,4 +155,5 @@ def boundary_submit():
         pi_t=y.pi_t,
         o_t1_pred=y.o_t1_pred,
         notes=y.notes,
+        proposals=proposals,  # R16-1: 介入候補をテンプレへ渡す
     )
