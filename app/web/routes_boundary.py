@@ -6,6 +6,7 @@ from app.core.contracts import StepInput  # R8-2: 契約型で入力を組み立
 from app.core.simulator import simulate_step  # R8-3: 1-stepを回す
 from app.storage.repository import init_db, save_step, read_step  # R8-4: 保存と「過去ログ読み取り」に使う
 
+from app.validators import validate_boundary_form  # R15-6: 定義準拠の検証を使う
 
 bp_boundary = Blueprint("boundary", __name__)  # R8-1: 境界テンプレ用Blueprint
 
@@ -55,57 +56,58 @@ def boundary_form():
 
     return render_template("boundary_form.html", form=form, error=None)  # R10-2: デフォルト/step_idで描画する
 
-@bp_boundary.post("/boundary")  # R8-1: フォーム送信を処理する
+@bp_boundary.post("/boundary")  # R5-2: フォーム送信を処理する
 def boundary_submit():
-    form = {  # R8-3: 再表示用に「そのままの入力」を保持する
-        "threat": request.form.get("threat", "0"),  # R8-3: threat入力（文字列のまま保持）
-        "body_alarm": request.form.get("body_alarm", "0"),  # R8-3: body_alarm入力（文字列のまま保持）
-        "need_clarity": request.form.get("need_clarity", "0"),  # R8-3: need_clarity入力（文字列のまま保持）
-        "energy": request.form.get("energy", "0"),  # R8-3: energy入力（文字列のまま保持）
-    }  # R8-3: 入力保持が目的
+    # --- 1) 入力検証（ここはあなたの現行実装に合わせてOK） ---
+    # 例: threat/body_alarm/... を作る or validate_boundary_form を使う
 
-    threat = _to_int(form["threat"], None)  # R8-3: int変換（失敗を検出したいのでdefault=None）
-    body_alarm = _to_int(form["body_alarm"], None)  # R8-3: int変換
-    need_clarity = _to_int(form["need_clarity"], None)  # R8-3: int変換
-    energy = _to_int(form["energy"], None)  # R8-3: int変換
+    cleaned, err = validate_boundary_form(request.form)  # R15-6: 検証+正規化
+    if err:
+        return render_template("boundary_form.html", error=err, form=dict(request.form)), 400  # R15-err-1: テンプレで安定参照
 
-    if None in (threat, body_alarm, need_clarity, energy):  # R8-3: どれかが変換失敗なら
-        return render_template("boundary_form.html", form=form, error="数値（0-3）で入力してください。"), 400  # R8-3: 入力保持で再表示
-    if not (0 <= threat <= 3 and 0 <= body_alarm <= 3 and 0 <= need_clarity <= 3 and 0 <= energy <= 3):  # R9-1: 許容範囲（0〜3）を強制する
-        return render_template("boundary_form.html", form=form, error="0〜3の範囲で入力してください。"), 400  # R9-2: 入力保持のまま400で再表示する
-    s_t = {"energy": energy}  # R8-4: 隠れ状態（V0最小）
-    o_t = {  # R8-4: 観測（V0最小）
-        "threat": threat,  # R8-4: threat
-        "body_alarm": body_alarm,  # R8-4: body_alarm
-        "need_clarity": need_clarity,  # R8-4: need_clarity
-        "energy": energy,  # R8-4: energy
-    }  # R8-4: 入力を整形
+    threat = cleaned["threat"]  # R15-6
+    body_alarm = cleaned["body_alarm"]  # R15-6
+    need_clarity = cleaned["need_clarity"]  # R15-6
+    energy = cleaned["energy"]  # R15-6
 
+    # --- 2) s_t / o_t を構成（あなたの現行そのままでOK） ---
+    s_t = {"energy": energy}  # R5-7: 隠れ状態（V0では最小）
+    o_t = {  # R5-7: 観測
+        "threat": threat,
+        "body_alarm": body_alarm,
+        "need_clarity": need_clarity,
+        "energy": energy,
+    }
+
+    # --- 3) StepInputを作る（ここが 94行目付近のはず） ---
     x = StepInput(  # R8-4: 契約どおりにStepInputを作る
-        s_t=s_t,  # R8-4: 隠れ状態
-        o_t=o_t,  # R8-4: 観測
+        s_t=s_t,  # R8-4
+        o_t=o_t,  # R8-4
         prefs={"safe": 0.7, "connect": 0.3},  # R8-4: 好み（V0固定）
         precision={"policy": 1.0},  # R8-4: 精度（V0固定）
-    )  # R8-4: 1-step入力完成
+    )
 
-    y = simulate_step(x)  # R8-5: 1-stepを回す
+    # --- 4) 1-stepシミュレート ---
+    y = simulate_step(x)  # R8-5: 1-step回す
 
-    init_db()  # R8-6: スキーマ確保（冪等）
-    row_id = save_step(  # R8-6: ログ保存
-        template_id="boundary",  # R8-6: template_id固定
-        s_t=s_t,  # R8-6: 隠れ状態保存
-        o_t=o_t,  # R8-6: 観測保存
-        pi_t=y.pi_t,  # R8-6: 方策保存
-        o_t1_pred=y.o_t1_pred,  # R8-6: 予測保存
-        notes=y.notes,  # R8-6: 介入案保存
-    )  # R8-6: 保存完了
+    # --- 5) 保存 ---
+    init_db()  # R8-6: スキーマ初期化（冪等）
+    row_id = save_step(  # R8-6: 1行保存
+        template_id="boundary",
+        s_t=s_t,
+        o_t=o_t,
+        pi_t=y.pi_t,
+        o_t1_pred=y.o_t1_pred,
+        notes=y.notes,
+    )
 
-    return render_template(  # R8-7: 結果表示
-        "boundary_result.html",  # R8-7: 結果テンプレ
-        row_id=row_id,  # R8-7: 保存ID表示
-        s_t=s_t,  # R8-7: 入力表示
-        o_t=o_t,  # R8-7: 入力表示
-        pi_t=y.pi_t,  # R8-7: 方策表示
-        o_t1_pred=y.o_t1_pred,  # R8-7: 予測表示
-        notes=y.notes,  # R8-7: 介入案表示
-    )  # R8-7: 描画
+    # --- 6) 結果ページ ---
+    return render_template(  # R5-2: 結果ページを返す
+        "boundary_result.html",
+        row_id=row_id,
+        s_t=s_t,
+        o_t=o_t,
+        pi_t=y.pi_t,
+        o_t1_pred=y.o_t1_pred,
+        notes=y.notes,
+    )
