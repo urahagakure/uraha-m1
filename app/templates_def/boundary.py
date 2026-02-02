@@ -15,10 +15,10 @@ class FieldDef:
 
 
 BOUNDARY_FIELDS: List[FieldDef] = [  # R15-3: boundaryテンプレの入力定義
-    FieldDef(key="threat", label="脅威推定 threat (0-3)", min=0, max=3, step=1, default=0),  # R15-3
-    FieldDef(key="body_alarm", label="身体警報 body_alarm (0-3)", min=0, max=3, step=1, default=0),  # R15-3
-    FieldDef(key="need_clarity", label="ニーズ明確度 need_clarity (0-3)", min=0, max=3, step=1, default=0),  # R15-3
-    FieldDef(key="energy", label="余力 energy (0-3)", min=0, max=3, step=1, default=0),  # R15-3
+    FieldDef(key="threat", label="脅威推定", min=0, max=3, step=1, default=0),  # R15-3
+    FieldDef(key="body_alarm", label="身体警報", min=0, max=3, step=1, default=0),  # R15-3
+    FieldDef(key="need_clarity", label="ニーズ明確度", min=0, max=3, step=1, default=0),  # R15-3
+    FieldDef(key="energy", label="余力", min=0, max=3, step=1, default=0),  # R15-3
 ]  # R15-3
 
 

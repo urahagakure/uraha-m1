@@ -1,8 +1,14 @@
-from __future__ import annotations  # R-run-0: 型注釈の前方参照を安定させる
+from __future__ import annotations
 
-from app import create_app  # R-run-1: create_app からFlaskアプリを生成する
+import os
+from app import create_app  # app/__init__.py の create_app を読む
 
-app = create_app()  # R-run-2: アプリを生成する（Blueprint登録もここで反映される）
+app = create_app()
 
-if __name__ == "__main__":  # R-run-3: 直叩き実行時だけサーバを起動する
-    app.run(host="0.0.0.0", port=5001, debug=True)  # R-run-4: 5000衝突回避のため5001で起動する
+if __name__ == "__main__":
+    host = os.getenv("URAHAM1_HOST", "127.0.0.1")
+    port = int(os.getenv("URAHAM1_PORT", "5001"))
+    debug = os.getenv("URAHAM1_DEBUG", "1") == "1"
+
+    # 重要：reloader を切る（2プロセス起動やcwd事故を避ける）
+    app.run(host=host, port=port, debug=debug, use_reloader=False)

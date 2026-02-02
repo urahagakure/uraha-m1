@@ -1,58 +1,37 @@
 from __future__ import annotations
 
-from flask import Flask, redirect, render_template, request, url_for
+from pathlib import Path
+
+from flask import Flask
 
 from app.config import Config
 from app.models import Issue, db
-from app.validators import validate_issue_form
-
 
 def create_app() -> Flask:
     app = Flask(__name__)
+
     app.config.from_object(Config)
+
+    # EVENT_LOG_PATH は config 由来でも絶対パスに正規化して固定する
+    project_root = Path(__file__).resolve().parent.parent
+    default_log_path = project_root / "instance" / "events.jsonl"
+    configured_log_path = app.config.get("EVENT_LOG_PATH") or default_log_path
+    log_path = Path(configured_log_path).resolve()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    app.config["EVENT_LOG_PATH"] = log_path
+
     db.init_app(app)
 
     with app.app_context():
-        db.create_all()
+        db.create_all()  # ★ これが無いとDB系が初回で事故りやすい
 
-    @app.get("/")
-    def home():
-        return render_template("home.html")
+    # ★ Blueprint を戻す（boundary / steps を生やす）
+    from app.web.routes_boundary import bp_boundary
+    app.register_blueprint(bp_boundary)
 
-    @app.get("/issues")
-    def issues_index():
-        issues = Issue.query.order_by(Issue.created_at.desc()).all()
-        return render_template("issues/index.html", issues=issues)
-
-    @app.route("/issues/new", methods=["GET", "POST"])
-    def issues_new():
-        if request.method == "POST":
-            data, errors = validate_issue_form(request.form)
-            if errors:
-                return (
-                    render_template(
-                        "issues/new.html",
-                        errors=errors,
-                        form=data,
-                    ),
-                    400,
-                )
-
-            issue = Issue(
-                title=data["title"],
-                tags=data["tags"],
-                intensity=data["intensity"],
-                note=data["note"],
-            )
-            db.session.add(issue)
-            db.session.commit()
-            return redirect(url_for("issues_index"))
-
-        return render_template("issues/new.html", errors=[], form={})
-
-    from app.web.routes_boundary import bp_boundary  # R5-2: 境界Blueprintを読み込む
-    app.register_blueprint(bp_boundary)  # R5-2: /boundary ルートを有効化する
-    from app.web.routes_steps import bp_steps  # R7-3: 履歴Blueprintを読み込む
-    app.register_blueprint(bp_steps)  # R7-3: /steps を有効化する
+    from app.web.routes_steps import bp_steps
+    app.register_blueprint(bp_steps)
 
     return app
+
+

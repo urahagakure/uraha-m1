@@ -14,26 +14,49 @@
 <pre>{{ o_t1_pred }}</pre>
 
 <h2>介入案（notes）</h2>
-
-<h2>介入点（方策が変わった近傍）</h2>
-{% if proposals and proposals|length > 0 %}
+{% if notes %}
   <ul>
-    {% for p in proposals %}
-      <li>
-        {{ p.label }} : {{ p.from }} → {{ p.to }}
-        （pi_t: {{ p.pi_t }}）
-      </li>
+    {% for n in notes %}
+      <li>{{ n }}</li>
     {% endfor %}
   </ul>
 {% else %}
-  <p>候補は0件でした（±1の範囲では方策が変わりませんでした）。</p>
+  <p>（なし）</p>
 {% endif %}
 
-<ul>
-  {% for n in notes %}
-    <li>{{ n }}</li>
+<h2>介入点（方策が変わった近傍）</h2>
+
+{% if proposals|length == 0 %}
+  <p>候補は0件でした（±1の範囲では方策が変わりませんでした）。</p>
+{% else %}
+
+  {% if proposal_summary %}
+    <ul>
+      {% for s in proposal_summary %}
+        <li>{{ s }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  {% for to_pi_t, items in proposal_groups.items() %}
+    <h3>{{ to_pi_t }} に変わる近傍</h3>
+
+    {% if items %}
+      <ul>
+        {% for p in items %}
+          <li>
+            {{ p.label }} {{ p.key }}（{{ p.range }}）: {{ p.from }} → {{ p.to }} {{ p.arrow }}
+            （pi_t: {{ p.from_pi_t }} → {{ p.to_pi_t }}）
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>なし</p>
+    {% endif %}
+
   {% endfor %}
-</ul>
+
+{% endif %}  {# ★これが外側ifの閉じ。今これが無い #}
 
 <p><a href="/steps">履歴一覧へ</a></p>
 

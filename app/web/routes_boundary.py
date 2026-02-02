@@ -1,159 +1,169 @@
-from __future__ import annotations  # R8-0: 前方参照を安定させる
+from __future__ import annotations  # R1
 
-from flask import Blueprint, render_template, request  # R8-1: ルート/テンプレ/入力を扱う
+from datetime import datetime, timezone  # R2
+from pathlib import Path  # R3
+from typing import Any, Dict, Tuple  # R4
 
-from app.core.contracts import StepInput  # R8-2: 契約型で入力を組み立てる
-from app.core.simulator import simulate_step  # R8-3: 1-stepを回す
-from app.storage.repository import init_db, save_step, read_step  # R8-4: 保存と「過去ログ読み取り」に使う
+from flask import Blueprint, current_app, jsonify, render_template, request  # R5
 
-from app.validators import validate_boundary_form  # R15-6: 定義準拠の検証を使う
+from app.domain.contracts import StepInput
+from app.domain.step import simulate_step
+from app.infra.jsonl import append_event
 
-from app.templates_def.boundary import BOUNDARY_FIELDS  # R16-5: 範囲情報を使う
-
-bp_boundary = Blueprint("boundary", __name__)  # R8-1: 境界テンプレ用Blueprint
-
-
-def _to_int(s: str, default: int = 0) -> int:  # R8-3: 文字列→intを安全に変換する
-    try:  # R8-3: 変換を試す
-        return int(s)  # R8-3: 変換できれば返す
-    except (TypeError, ValueError):  # R8-3: 変換できなければ
-        return default  # R8-3: defaultを返す
+bp_boundary = Blueprint("boundary", __name__)  # R9
 
 
-def _build_form_from_ot(o_t: dict) -> dict:  # R8-2: 過去ログのo_tからフォーム初期値を作る
-    return {  # R8-2: フォームはテンプレで扱いやすいように文字列で持つ
-        "threat": str(o_t.get("threat", 0)),  # R8-2: threat初期値
-        "body_alarm": str(o_t.get("body_alarm", 0)),  # R8-2: body_alarm初期値
-        "need_clarity": str(o_t.get("need_clarity", 0)),  # R8-2: need_clarity初期値
-        "energy": str(o_t.get("energy", 0)),  # R8-2: energy初期値
-    }  # R8-2: 必須項目を揃える
+def _validate(form: Dict[str, Any]) -> Tuple[Dict[str, Any], str | None]:  # R10
+    def _i(name: str, lo: int, hi: int, default: int) -> int:  # R11
+        try:
+            v = int(form.get(name, default))
+        except Exception:
+            return default
+        return max(lo, min(hi, v))
+
+    def _f(name: str, lo: float, hi: float, default: float) -> float:  # R12
+        try:
+            v = float(form.get(name, default))
+        except Exception:
+            return default
+        return max(lo, min(hi, v))
+
+    cleaned = {
+        "threat": _i("threat", 0, 3, 2),
+        "body_alarm": _i("body_alarm", 0, 3, 2),
+        "need_clarity": _i("need_clarity", 0, 3, 1),
+        "energy": _i("energy", 0, 3, 2),
+        "safe": _f("safe", 0.0, 1.0, 0.7),
+        "connect": _f("connect", 0.0, 1.0, 0.3),
+        "prec_policy": _f("prec_policy", 0.0, 3.0, 1.0),
+    }
+    return cleaned, None
 
 
-@bp_boundary.get("/boundary")  # R10-0: 入力フォームを表示する
-def boundary_form():
-    # R10-1: クエリから直接フォーム値を受け取れるようにする（結果→再実行用）
-    q_threat = request.args.get("threat")  # R10-1: threatをクエリから受け取る
-    q_body_alarm = request.args.get("body_alarm")  # R10-1: body_alarmをクエリから受け取る
-    q_need_clarity = request.args.get("need_clarity")  # R10-1: need_clarityをクエリから受け取る
-    q_energy = request.args.get("energy")  # R10-1: energyをクエリから受け取る
+def _build_step_input(cleaned: Dict[str, Any]) -> StepInput:  # R20
+    x = StepInput(
+        s_t={"energy": int(cleaned["energy"])},
+        o_t={
+            "threat": int(cleaned["threat"]),
+            "body_alarm": int(cleaned["body_alarm"]),
+            "need_clarity": int(cleaned["need_clarity"]),
+            "energy": int(cleaned["energy"]),
+        },
+        prefs={"safe": float(cleaned["safe"]), "connect": float(cleaned["connect"])},
+        precision={"policy": float(cleaned["prec_policy"])},
+    )
+    return x
 
-    form = {"threat": "0", "body_alarm": "0", "need_clarity": "0", "energy": "0"}  # R10-2: デフォルト初期値
 
-    # R10-3: クエリ値が揃っているなら、それを優先してフォームを作る
-    if any(v is not None for v in (q_threat, q_body_alarm, q_need_clarity, q_energy)):  # R10-3: どれかが来ていれば
-        form = {  # R10-3: クエリ値を文字列のままフォームに入れる（入力保持と同じ方針）
-            "threat": q_threat or "0",  # R10-3: threat
-            "body_alarm": q_body_alarm or "0",  # R10-3: body_alarm
-            "need_clarity": q_need_clarity or "0",  # R10-3: need_clarity
-            "energy": q_energy or "0",  # R10-3: energy
-        }
-        return render_template("boundary_form.html", form=form, error=None)  # R10-3: クエリフォームで描画する
+def _save_event(*, x: StepInput, y) -> Path:
+    event = {
+        "ok": True,  # ★追加：成功フラグ（将来の失敗ログと混ぜても判別できる）
+        "app": "uraha_m1_flask",
+        "template": "boundary_v0",
+        "ts": datetime.now(timezone.utc).isoformat(),
 
-    # R10-4: クエリが無い場合は step_id を見る（従来の再実行）
-    step_id = request.args.get("step_id")  # R10-4: 再実行元ログID（任意）
-    if step_id:  # R10-4: step_idが指定されている場合
-        step = read_step(_to_int(step_id, 0))  # R10-4: DBからログを読む
-        if step and isinstance(step.get("o_t"), dict):  # R10-4: o_tが辞書なら
-            form = _build_form_from_ot(step["o_t"])  # R10-4: o_tからフォームを作る
+        "source": "m1_flask",        # ★追加：どの実行元か（m2/m3/m4と揃える）
+        "route": request.path,       # ★追加：/boundary or /api/boundary
+        "endpoint": request.endpoint,# ★追加：boundary.boundary_submit_api みたいな識別子
+        "method": request.method,    # ★追加：POST/GET
 
-    return render_template("boundary_form.html", form=form, error=None)  # R10-2: デフォルト/step_idで描画する
-
-def propose_interventions(base_cleaned: dict, base_pi_t: str) -> list[dict]:  # R16-1: 介入候補を作る
-    proposals: list[dict] = []  # R16-1: 候補を貯める
-
-    for f in BOUNDARY_FIELDS:  # R16-2: 各入力を1つずつ動かす
-        for delta in (-1, 1):  # R16-2: ±1だけ試す
-            v0 = int(base_cleaned[f.key])  # R16-2: 現在値
-            v1 = v0 + delta  # R16-2: 近傍値
-            if v1 < f.min or v1 > f.max:  # R16-5: 範囲外はスキップ
-                continue  # R16-5: 無効候補は出さない
-
-            alt = dict(base_cleaned)  # R16-2: 入力をコピーする
-            alt[f.key] = v1  # R16-2: 1項目だけ変更する
-
-            # --- alt でsimulate_stepを回す（既存ロジックを最小で再利用） ---
-            s_t = {"energy": alt["energy"]}  # R16-3: 隠れ状態（現状どおり）
-            o_t = {  # R16-3: 観測（現状どおり）
-                "threat": alt["threat"],
-                "body_alarm": alt["body_alarm"],
-                "need_clarity": alt["need_clarity"],
-                "energy": alt["energy"],
-            }
-
-            x = StepInput(  # R16-3: 契約どおり入力を作る
-                s_t=s_t,  # R16-3
-                o_t=o_t,  # R16-3
-                prefs={"safe": 0.7, "connect": 0.3},  # R16-3: V0固定
-                precision={"policy": 1.0},  # R16-3: V0固定
-            )
-            y = simulate_step(x)  # R16-3: 近傍ケースを評価する
-
-            if y.pi_t != base_pi_t:  # R16-3: 方策が変わったものだけ採用
-                proposals.append({  # R16-4: 表示用の情報をまとめる
-                    "key": f.key,  # R16-4: 変更項目
-                    "label": f.label,  # R16-4: 表示名
-                    "from": v0,  # R16-4: 変更前
-                    "to": v1,  # R16-4: 変更後
-                    "pi_t": y.pi_t,  # R16-4: 新しい方策
-                })
-
-    return proposals  # R16-1: 候補一覧を返す
-
-@bp_boundary.post("/boundary")  # R5-2: フォーム送信を処理する
-def boundary_submit():
-    # --- 1) 入力検証（ここはあなたの現行実装に合わせてOK） ---
-    # 例: threat/body_alarm/... を作る or validate_boundary_form を使う
-
-    cleaned, err = validate_boundary_form(request.form)  # R15-6: 検証+正規化
-    if err:
-            return render_template("boundary_form.html", error=err, form=dict(request.form)), 400  # R15-err-1: テンプレで安定参照
-
-    threat = cleaned["threat"]  # R15-6
-    body_alarm = cleaned["body_alarm"]  # R15-6
-    need_clarity = cleaned["need_clarity"]  # R15-6
-    energy = cleaned["energy"]  # R15-6
-
-    # --- 2) s_t / o_t を構成（あなたの現行そのままでOK） ---
-    s_t = {"energy": energy}  # R5-7: 隠れ状態（V0では最小）
-    o_t = {  # R5-7: 観測
-        "threat": threat,
-        "body_alarm": body_alarm,
-        "need_clarity": need_clarity,
-        "energy": energy,
+        "input": {
+            "s_t": x.s_t,
+            "o_t": x.o_t,
+            "prefs": x.prefs,
+            "precision": x.precision,
+        },
+        "output": {
+            "pi_t": y.pi_t,
+            "o_t1_pred": y.o_t1_pred,
+            "notes": y.notes,
+        },
     }
 
-    # --- 3) StepInputを作る（ここが 94行目付近のはず） ---
-    x = StepInput(  # R8-4: 契約どおりにStepInputを作る
-        s_t=s_t,  # R8-4
-        o_t=o_t,  # R8-4
-        prefs={"safe": 0.7, "connect": 0.3},  # R8-4: 好み（V0固定）
-        precision={"policy": 1.0},  # R8-4: 精度（V0固定）
+    log_path = current_app.config.get("EVENT_LOG_PATH")  # ★KeyError回避
+    if not log_path:
+        # 念のための保険（基本ここには来ない）
+        project_root = Path(current_app.root_path).parent
+        log_path = (project_root / "instance" / "events.jsonl").resolve()
+
+    log_path = Path(log_path).resolve()  # 相対設定が来ても絶対化して固定
+    current_app.config["EVENT_LOG_PATH"] = log_path  # 次回以降も安定
+    log_path.parent.mkdir(parents=True, exist_ok=True)  # ★ここで必ず作る
+    saved_to = append_event(event, path=log_path)
+    return saved_to
+
+def _run(cleaned: Dict[str, Any]):
+    x = StepInput(
+        s_t={"energy": int(cleaned["energy"])},
+        o_t={
+            "threat": int(cleaned["threat"]),
+            "body_alarm": int(cleaned["body_alarm"]),
+            "need_clarity": int(cleaned["need_clarity"]),
+            "energy": int(cleaned["energy"]),
+        },
+        prefs={"safe": float(cleaned["safe"]), "connect": float(cleaned["connect"])},
+        precision={"policy": float(cleaned["prec_policy"])},
     )
+    y = simulate_step(x)
+    return x, y
 
-    # --- 4) 1-stepシミュレート ---
-    y = simulate_step(x)  # R8-5: 1-step回す
 
-    # --- 5) 保存 ---
-    init_db()  # R8-6: スキーマ初期化（冪等）
-    row_id = save_step(  # R8-6: 1行保存
-        template_id="boundary",
-        s_t=s_t,
-        o_t=o_t,
-        pi_t=y.pi_t,
-        o_t1_pred=y.o_t1_pred,
-        notes=y.notes,
-    )
+@bp_boundary.get("/boundary")  # R50
+def boundary_form():  # R50
+    defaults = {
+        "threat": 2,
+        "body_alarm": 2,
+        "need_clarity": 1,
+        "energy": 2,
+        "safe": 0.7,
+        "connect": 0.3,
+        "prec_policy": 1.0,
+    }
+    return render_template("boundary_form.html", form=defaults, error=None), 200
 
-    proposals = propose_interventions(cleaned, y.pi_t)  # R16-1: 介入候補を計算する
 
-    # --- 6) 結果ページ ---
-    return render_template(  # R5-2: 結果ページを返す
-        "boundary_result.html",
-        row_id=row_id,
-        s_t=s_t,
-        o_t=o_t,
-        pi_t=y.pi_t,
-        o_t1_pred=y.o_t1_pred,
-        notes=y.notes,
-        proposals=proposals,  # R16-1: 介入候補をテンプレへ渡す
-    )
+@bp_boundary.post("/boundary")
+def boundary_submit_html():
+    cleaned, err = _validate(request.form)
+    if err:
+        return render_template("boundary_form.html", form=cleaned, error=err), 400
+
+    x, y = _run(cleaned)
+    saved_to = _save_event(x=x, y=y)
+    return render_template("boundary_result.html", y=y, saved_to=str(saved_to)), 200
+
+
+@bp_boundary.post("/api/boundary")
+def boundary_submit_api():
+    payload = request.get_json(silent=True) or {}
+    cleaned, err = _validate(payload)
+    if err:
+        body = {
+            "ok": False,
+            "error": err,
+            "input": cleaned,
+        }
+        # DEBUG時だけ付ける（推奨）
+        if current_app.debug:
+            body["log_path_abs"] = str(current_app.config["EVENT_LOG_PATH"])
+            body["cwd"] = str(Path.cwd())
+        return jsonify(body), 400
+
+    x, y = _run(cleaned)
+    saved_to = _save_event(x=x, y=y)  # saved_to は Path の想定
+
+    body = {
+        "ok": True,
+        "saved_to": str(saved_to.resolve()),  # ★絶対パスで固定（1本で十分）
+        "pi_t": y.pi_t,
+        "o_t1_pred": y.o_t1_pred,
+        "notes": y.notes,
+    }
+
+    if current_app.debug:
+        body["log_path_abs"] = str(Path(current_app.config["EVENT_LOG_PATH"]).resolve())
+        body["cwd"] = str(Path.cwd())
+
+    return jsonify(body), 200
+
+
