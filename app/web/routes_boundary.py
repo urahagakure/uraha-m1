@@ -9,6 +9,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request  # R
 from app.domain.contracts import StepInput
 from app.domain.step import simulate_step
 from app.infra.jsonl import append_event
+from app.templates_def.boundary import boundary_defaults
 
 bp_boundary = Blueprint("boundary", __name__)  # R9
 
@@ -108,17 +109,9 @@ def _run(cleaned: Dict[str, Any]):
     return x, y
 
 
-@bp_boundary.get("/boundary")  # R50
-def boundary_form():  # R50
-    defaults = {
-        "threat": 2,
-        "body_alarm": 2,
-        "need_clarity": 1,
-        "energy": 2,
-        "safe": 0.7,
-        "connect": 0.3,
-        "prec_policy": 1.0,
-    }
+@bp_boundary.get("/boundary")
+def boundary_form():
+    defaults = boundary_defaults()
     return render_template("boundary_form.html", form=defaults, error=None), 200
 
 

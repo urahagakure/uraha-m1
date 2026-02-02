@@ -14,12 +14,12 @@ class FieldDef:
     default: int  # R15-4: 既定値
 
 
-BOUNDARY_FIELDS: List[FieldDef] = [  # R15-3: boundaryテンプレの入力定義
-    FieldDef(key="threat", label="脅威推定", min=0, max=3, step=1, default=0),  # R15-3
-    FieldDef(key="body_alarm", label="身体警報", min=0, max=3, step=1, default=0),  # R15-3
-    FieldDef(key="need_clarity", label="ニーズ明確度", min=0, max=3, step=1, default=0),  # R15-3
-    FieldDef(key="energy", label="余力", min=0, max=3, step=1, default=0),  # R15-3
-]  # R15-3
+BOUNDARY_FIELDS: List[FieldDef] = [
+    FieldDef(key="threat", label="脅威推定", min=0, max=3, step=1, default=2),
+    FieldDef(key="body_alarm", label="身体警報", min=0, max=3, step=1, default=2),
+    FieldDef(key="need_clarity", label="ニーズ明確度", min=0, max=3, step=1, default=1),
+    FieldDef(key="energy", label="余力", min=0, max=3, step=1, default=2),
+]
 
 
 def boundary_defaults() -> Dict[str, int]:  # R15-4: 既定値辞書を返す
